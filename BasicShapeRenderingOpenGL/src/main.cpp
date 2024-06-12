@@ -1,15 +1,39 @@
 #include "Shader.h"
 #include "VertexArray.h"
 #include "Buffer.h"
+#include "Texture.h"
 
 #include <glad/glad.h>
 #include <glfw3.h>
-#include <vector>
 
+#include <vector>
 #include <iostream>
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow* window);
+void checkOpenGLError(const char* stmt, const char* fname, int line) {
+    GLenum err = glGetError();
+    while (err != GL_NO_ERROR) {
+        const char* error;
+        switch (err) {
+        case GL_INVALID_ENUM:      error = "GL_INVALID_ENUM"; break;
+        case GL_INVALID_VALUE:     error = "GL_INVALID_VALUE"; break;
+        case GL_INVALID_OPERATION: error = "GL_INVALID_OPERATION"; break;
+        case GL_STACK_OVERFLOW:    error = "GL_STACK_OVERFLOW"; break;
+        case GL_STACK_UNDERFLOW:   error = "GL_STACK_UNDERFLOW"; break;
+        case GL_OUT_OF_MEMORY:     error = "GL_OUT_OF_MEMORY"; break;
+        case GL_INVALID_FRAMEBUFFER_OPERATION: error = "GL_INVALID_FRAMEBUFFER_OPERATION"; break;
+        default:                   error = "Unknown Error"; break;
+        }
+        std::cerr << "OpenGL error [" << error << "] in " << fname << " at line " << line << ": " << stmt << std::endl;
+        err = glGetError();
+    }
+}
+
+#define CHECK_GL_ERROR(stmt) do { \
+    stmt; \
+    checkOpenGLError(#stmt, __FILE__, __LINE__); \
+} while (0)
 
 // settings
 const unsigned int SCR_WIDTH = 800;
@@ -18,20 +42,35 @@ const unsigned int SCR_HEIGHT = 600;
 const char* vertexShaderSource = R"(
     #version 330 core
     layout (location = 0) in vec3 aPos;
+    layout (location = 1) in vec2 aTexCoord;
+
     out vec4 vertexColor;
+    out vec2 TexCoord;
+
     void main()
     {
-       gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
+        gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
+        TexCoord = vec2(aTexCoord.x, aTexCoord.y);
     }
 )";
 
 const char* fragmentShaderSource = R"(
     #version 330 core
+
     out vec4 color;
+
+    in vec2 TexCoord;
+
     uniform vec4 ourColor;
+
+    // texture samplers
+    uniform sampler2D texture1;
+    uniform sampler2D texture2;
+
+
     void main()
     {
-       color = ourColor;
+       color = mix(texture(texture1, TexCoord), texture(texture2, TexCoord), 0.2);
     }
 )";
 
@@ -80,10 +119,11 @@ int main()
     // set up vertex data (and buffer(s)) and configure vertex attributes
     // ------------------------------------------------------------------
     std::vector<float> vertices = {
-        0.5f,  0.5f, 0.0f,  // top right
-         0.5f, -0.5f, 0.0f,  // bottom right
-        -0.5f, -0.5f, 0.0f,  // bottom left
-        -0.5f,  0.5f, 0.0f   // top left 
+        // Positions            // Texture Coords
+         0.5f,  0.5f, 0.0f,     1.0f, 1.0f,     // top right
+         0.5f, -0.5f, 0.0f,     1.0f, 0.0f,     // bottom right
+        -0.5f, -0.5f, 0.0f,     0.0f, 0.0f,     // bottom left
+        -0.5f,  0.5f, 0.0f,     0.0f, 1.0f      // top left 
     };
 
     std::vector<unsigned int> indices = {  // note that we start from 0!
@@ -99,14 +139,32 @@ int main()
 
     IndexBuffer indexBuffer = IndexBuffer(indices);
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
+
+    // texture coord attribute
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
 
     vertexBuffer.Unbind();
 
     // You can unbind the VAO afterwards so other VAO calls won't accidentally modify this VAO, but this rarely happens. Modifying other
     // VAOs requires a call to glBindVertexArray anyways so we generally don't unbind VAOs (nor VBOs) when it's not directly necessary.
     vertexArray.Unbind();
+
+    // load and create a textures
+    std::string texturePath = "Assets/Wood_Tiles.jpg";
+    Texture texture1 = Texture(texturePath);
+    std::string texture2Path = "Assets/Metal_Grill.jpg";
+    Texture texture2 = Texture(texture2Path);
+
+    // tell opengl for each sampler to which texture unit it belongs to (only has to be done once)
+    // -------------------------------------------------------------------------------------------
+    shader.UseProgram(); // don't forget to activate/use the shader before setting uniforms!
+    // either set it manually like so:
+    glUniform1i(glGetUniformLocation(shader.GetShaderProgram(), "texture1"), 0);
+    // or set it via the texture class
+    shader.SetUniformInt("texture2", 1);
 
 
     // uncomment this call to draw in wireframe polygons.
@@ -122,6 +180,14 @@ int main()
         // ------
         glClearColor(0.2f, 0.1f, 0.8f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
+
+        // bind textures on corresponding texture units
+        /*texture.Bind(0);
+        texture2.Bind(1);*/
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture1.GetTextureID());
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, texture2.GetTextureID());
 
         // Activate Progarm
         shader.UseProgram();

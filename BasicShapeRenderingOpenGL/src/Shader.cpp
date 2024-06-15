@@ -1,6 +1,7 @@
 #include "Shader.h"
 
 #include <glad/glad.h>
+#include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 
 Shader::Shader(const char* vertexShaderSource, const char* fragmentShaderSource)
@@ -92,3 +93,17 @@ void Shader::SetUniformInt(std::string name, int value)
     int location = glGetUniformLocation(mShaderProgram, name.c_str());
     glUniform1i(location, value);
 }
+
+void Shader::SetUniformMat4(std::string name, glm::mat4 value)
+{
+    int location = glGetUniformLocation(mShaderProgram, name.c_str());
+    glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(value));
+}
+
+void Shader::SetUniformMat3(std::string name, glm::mat3 value)
+{
+    int location = glGetUniformLocation(mShaderProgram, name.c_str());
+    glUniformMatrix3fv(location, 1, GL_FALSE, glm::value_ptr(value));
+}
+
+

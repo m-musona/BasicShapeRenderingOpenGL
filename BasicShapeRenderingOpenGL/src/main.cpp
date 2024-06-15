@@ -4,13 +4,20 @@
 #include "Texture.h"
 
 #include <glad/glad.h>
+#include "Camera.h"
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <glfw3.h>
 
 #include <vector>
 #include <iostream>
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+void mouse_callback(GLFWwindow* window, double xpos, double ypos);
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow* window);
+
 void checkOpenGLError(const char* stmt, const char* fname, int line) {
     GLenum err = glGetError();
     while (err != GL_NO_ERROR) {
@@ -39,6 +46,12 @@ void checkOpenGLError(const char* stmt, const char* fname, int line) {
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
+Camera camera = Camera((float)SCR_WIDTH, (float)SCR_HEIGHT);
+
+// timing
+float deltaTime = 0.0f;	// time between current frame and last frame
+float lastFrame = 0.0f;
+
 const char* vertexShaderSource = R"(
     #version 330 core
     layout (location = 0) in vec3 aPos;
@@ -47,9 +60,13 @@ const char* vertexShaderSource = R"(
     out vec4 vertexColor;
     out vec2 TexCoord;
 
+    uniform mat4 model;
+    uniform mat4 view;
+    uniform mat4 projection;
+
     void main()
     {
-        gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
+        gl_Position = projection * view * model * vec4(aPos, 1.0);
         TexCoord = vec2(aTexCoord.x, aTexCoord.y);
     }
 )";
@@ -98,6 +115,10 @@ int main()
 	}
 	glfwMakeContextCurrent(window);
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSetScrollCallback(window, scroll_callback);
+
+    // tell GLFW to capture our mouse
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	// glad: load all OpenGL function pointers
 	// ---------------------------------------
@@ -106,6 +127,10 @@ int main()
 		std::cout << "Failed to initialize GLAD" << std::endl;
 		return -1;
 	}
+
+    // configure global opengl state
+    // -----------------------------
+    //glEnable(GL_DEPTH_TEST);
 
     // build and compile our shader program
     // ------------------------------------
@@ -172,6 +197,11 @@ int main()
 
 	while (!glfwWindowShouldClose(window))
 	{
+        // per-frame time logic
+        // --------------------
+        float currentFrame = static_cast<float>(glfwGetTime());
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
         // input
         // -----
         processInput(window);
@@ -192,10 +222,21 @@ int main()
         // Activate Progarm
         shader.UseProgram();
 
+        // pass projection matrix to shader (note that in this case it could change every frame)
+        shader.SetUniformMat4("projection", camera.GetCameraProjection());
+
+        // camera/view transformation
+        shader.SetUniformMat4("view", camera.GetCameraView());
+
         // update the uniform color
         float timeValue = glfwGetTime();
         float greenValue = sin(timeValue) / 2.0f + 0.5f;
         shader.SetUniformFloat4("ourColor", { 0.0f, greenValue, 0.0f, 1.0f });
+
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(0.0f, 0.0f, -1.0f));
+        model = glm::rotate(model, glm::radians(0.0f), glm::vec3(1.0f, 0.3f, 0.5f));
+        shader.SetUniformMat4("model", model);
 
         // Render Triangle
         vertexArray.Bind(); // seeing as we only have a single VAO there's no need to bind it every time, but we'll do so to keep things a bit more organized
@@ -228,6 +269,12 @@ void processInput(GLFWwindow* window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
+
+    double xpos, ypos;
+    glfwGetCursorPos(window, &xpos, &ypos);
+    camera.MouseCallback(xpos, ypos);
+
+    camera.processInput(window, deltaTime);
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
@@ -237,4 +284,11 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
     // make sure the viewport matches the new window dimensions; note that width and 
     // height will be significantly larger than specified on retina displays.
     glViewport(0, 0, width, height);
+}
+
+// glfw: whenever the mouse scroll wheel scrolls, this callback is called
+// ----------------------------------------------------------------------
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+    camera.ScrollCallback(xoffset, yoffset);
 }

@@ -18,6 +18,8 @@ public:
 	void SetUniformFloat3(std::string name, glm::vec3 value);
 	void SetUniformFloat(std::string name, float value);
 	void SetUniformInt(std::string name, int value);
+	void SetUniformMat4(std::string name, glm::mat4 value);
+	void SetUniformMat3(std::string name, glm::mat3 value);
 private:
 	unsigned int mVertexShader, mFragmentShader;
 	unsigned int mShaderProgram;
